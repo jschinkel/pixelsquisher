@@ -1,4 +1,4 @@
-package com.pixelsquisherclean
+package com.pixelsquisher
 
 import android.app.Application
 import com.facebook.react.PackageList
