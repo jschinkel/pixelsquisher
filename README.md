@@ -1,97 +1,53 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Pixel Squisher
 
-# Getting Started
+A tiny mobile app that compresses video to the Small File standard — 1.44 MB per minute or less — entirely on your phone. No servers, no data centers, no internet required. Compress locally, then submit your favourite clips to Small File TV.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+A [Small File Media Society](https://smallfile.ca) project.
 
-## Step 1: Start Metro
+---
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## What it does
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+Online video is responsible for a large and growing share of global carbon emissions. Small-File Ecomedia is a response: movies of no more than 1.44 megabytes per minute, a tiny fraction of standard video (typically 60–350 MB/min). Pixel Squisher makes it easy for anyone to bring their own footage down to that standard, on-device, and share the result.
 
-```sh
-# Using npm
-npm start
+- **Compress to the Small File standard** — every mode lands at or below 1.44 MB/min.
+- **Fully on-device** — no uploads, no cloud processing, works offline.
+- **Preset modes** — from *Standard* (480p with sound) down to *Pixel Soup* (240p, silent, maximum crush).
+- **Custom mode** — dial in your own resolution, bitrate, and audio, with a name generated for every combination.
+- **Submit to Small File TV** — send clips straight to the festival's showcase.
+- **Save & share** — export to your gallery or share to any app.
 
-# OR using Yarn
-yarn start
-```
+## Compression modes
 
-## Step 2: Build and run your app
+| Mode | Target | Notes |
+|------|--------|-------|
+| Standard | ~1.44 MB/min | 480p, with sound |
+| Tiny | ~1.0 MB/min | 360p, with sound |
+| Micro | ~0.5 MB/min | 360p, silent |
+| Blocky | ~0.4 MB/min | 360p, silent, pixelated |
+| Pixel Soup | ~0.3 MB/min | 240p, silent, maximum compression |
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+Plus a **Custom** mode for tuning resolution, bitrate, and audio by hand.
 
-### Android
+## How it works
 
-```sh
-# Using npm
-npm run android
+Pixel Squisher uses the device's native hardware video encoder (H.264 via Android MediaCodec) rather than bundling a heavy software codec. This keeps the app extremely small, avoids codec patent exposure, and runs fast on modest hardware — choices that reflect the small-file ethos in the app itself.
 
-# OR using Yarn
-yarn android
-```
+## Platforms
 
-### iOS
+- **Android** — available now.
+- **iOS** — in development.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## Tech
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+React Native. Video compression via [`react-native-compressor`](https://github.com/numandev1/react-native-compressor).
 
-```sh
-bundle install
-```
+## About Small File Media Society
 
-Then, and every time you update your native dependencies, run:
+Small File Media Society was founded in 2020 to raise awareness of the carbon footprint of streaming media and to champion low-bandwidth moving-image art. The Small File Media Festival runs annually in partnership with The Cinematheque in Vancouver.
 
-```sh
-bundle exec pod install
-```
+Learn more at [smallfile.ca](https://smallfile.ca).
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## License
 
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+See [LICENSE](LICENSE).
