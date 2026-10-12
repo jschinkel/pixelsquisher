@@ -72,6 +72,26 @@ const RES_OPTIONS = [
   { label: '240p', value: 240 },
   { label: '144p', value: 144 },
 ];
+// Encoder-floor fallback ladder. When a device's hardware encoder rejects a
+// resolution+bitrate combo (common at low res + low bitrate on some chipsets),
+// we retry: first bump the bitrate (keeps the low resolution the user chose),
+// then as a last resort bump the resolution.
+const BITRATE_LADDER = [32000, 48000, 64000, 100000, 120000];
+const RES_LADDER = [144, 240, 360, 480];
+
+const buildFallbackAttempts = (res: number, bitrate: number) => {
+  const attempts: { maxSize: number; bitrate: number; reason: string }[] = [];
+  // 1. Same resolution, step bitrate up through the ladder
+  for (const b of BITRATE_LADDER) {
+    if (b > bitrate) attempts.push({ maxSize: res, bitrate: b, reason: 'bitrate' });
+  }
+  // 2. Then step resolution up (at a safe mid bitrate), last resort
+  for (const r of RES_LADDER) {
+    if (r > res) attempts.push({ maxSize: r, bitrate: Math.max(bitrate, 64000), reason: 'resolution' });
+  }
+  return attempts;
+};
+
 const BITRATE_OPTIONS = [
   { label: 'Standard', value: 120000 },
   { label: 'Low', value: 64000 },
@@ -83,30 +103,30 @@ const BITRATE_OPTIONS = [
 const COMBO_NAMES: { [key: string]: string } = {
   // 480p
   '480-120000-a': 'STANDARD',
-  '480-120000-s': 'MIME MODE',
-  '480-64000-a': 'EASY LISTENING',
+  '480-120000-s': 'MIME',
+  '480-64000-a': 'FM',
   '480-64000-s': 'QUIET STANDARD',
-  '480-32000-a': 'CHATTERBOX',
+  '480-32000-a': 'STATIC',
   '480-32000-s': 'CLEAN CRUSH',
   // 360p
-  '360-120000-a': 'MATINEE',
-  '360-120000-s': 'SILENT MATINEE',
+  '360-120000-a': 'MIASMA',
+  '360-120000-s': 'SILENT FEATURE',
   '360-64000-a': 'THRIFT',
   '360-64000-s': 'THRIFT SILENT',
   '360-32000-a': 'BUDGET TALKIE',
   '360-32000-s': 'PENNY DREADFUL',
   // 240p
-  '240-120000-a': 'GRAINY WITH SOUND',
-  '240-120000-s': 'FILMSTRIP',
-  '240-64000-a': 'MURMUR',
-  '240-64000-s': 'LOW COUNTRY',
+  '240-120000-a': 'SEDIMENT',
+  '240-120000-s': 'OOZE',
+  '240-64000-a': 'WHISPER',
+  '240-64000-s': 'SILENT WHISPER',
   '240-32000-a': 'PIXEL BROTH',
   '240-32000-s': 'PIXEL SOUP',
   // 144p
-  '144-120000-a': 'TINY TALKIE',
+  '144-120000-a': 'LOZENGE',
   '144-120000-s': 'POSTAGE STAMP',
-  '144-64000-a': 'FAINT SIGNAL',
-  '144-64000-s': 'RUMOUR OF A VIDEO',
+  '144-64000-a': 'SIGNAL',
+  '144-64000-s': 'VIDEO',
   '144-32000-a': 'HAUNTED THUMBNAIL',
   '144-32000-s': 'HOMEOPATHIC',
 };
@@ -559,7 +579,56 @@ const App = () => {
       setCompressing(true);
       setProgress(0);
       navigateToLibrary();
-      await compressVideo(inputPath, mode);
+
+      // Encoder-floor fallback: some devices reject a resolution+bitrate combo
+      // (e.g. 144p at the lowest bitrate). Retry up a ladder — bitrate first so
+      // the chosen resolution is preserved, resolution only as a last resort.
+      const isEncoderError = (e: any) => {
+        const msg = String(e?.message || e);
+        return msg.includes('ENCODER_RESOLUTION_UNSUPPORTED') ||
+               msg.includes('IllegalArgumentException') ||
+               msg.includes('configure');
+      };
+
+      try {
+        await compressVideo(inputPath, mode);
+      } catch (err) {
+        if (cancelRequestedRef.current) throw err;
+        if (!isEncoderError(err) || !mode.maxSize) throw err;
+
+        const attempts = buildFallbackAttempts(mode.maxSize, mode.bitrate);
+        let succeeded = false;
+        let landedRes = mode.maxSize;
+
+        for (const attempt of attempts) {
+          if (cancelRequestedRef.current) break;
+          try {
+            setProgress(0);
+            await compressVideo(inputPath, { ...mode, maxSize: attempt.maxSize, bitrate: attempt.bitrate });
+            succeeded = true;
+            landedRes = attempt.maxSize;
+            break;
+          } catch (retryErr) {
+            if (cancelRequestedRef.current) throw retryErr;
+            if (!isEncoderError(retryErr)) throw retryErr;
+            // else keep trying the next rung
+          }
+        }
+
+        if (!succeeded) {
+          throw new Error('ENCODER_RESOLUTION_UNSUPPORTED');
+        }
+
+        // Only tell the user if the resolution actually changed. A silent
+        // bitrate bump at the same resolution needs no explanation.
+        if (landedRes !== mode.maxSize) {
+          Alert.alert(
+            'Resolution adjusted',
+            `${mode.maxSize}p isn't supported on this device. Compressed at ${landedRes}p instead.`
+          );
+        }
+      }
+
       if (!cancelRequestedRef.current) {
         setCompressing(false);
         setProgress(0);
@@ -569,7 +638,17 @@ const App = () => {
       if (!cancelRequestedRef.current) {
         setCompressing(false);
         setProgress(0);
-        Alert.alert('Error', `Failed to select video: ${error}`);
+        const msg = String((error as any)?.message || error);
+        if (msg.includes('ENCODER_RESOLUTION_UNSUPPORTED') ||
+            msg.includes('IllegalArgumentException') ||
+            msg.includes('configure')) {
+          Alert.alert(
+            'Compression Failed',
+            "This device's encoder couldn't process that setting. Try a higher resolution."
+          );
+        } else {
+          Alert.alert('Error', 'Something went wrong. Please try again.');
+        }
       }
     }
   };
@@ -617,14 +696,11 @@ const App = () => {
       const compressedSize = compressedStat.size;
       const estimatedBitrate = mode.bitrate / 1000;
 
-      // Guard: encoder produced a broken/empty file (can happen at very low bitrates)
+      // Guard: encoder produced a broken/empty file (happens when the device's
+      // encoder won't accept the requested resolution, e.g. 144p on some chipsets).
       if (compressedSize < 10 * 1024) {
         try { await RNFS.unlink(outputPath); } catch (e) {}
-        Alert.alert(
-          'Compression Failed',
-          "This mode couldn't process your video on this device. Try a higher quality mode."
-        );
-        return;
+        throw new Error('ENCODER_RESOLUTION_UNSUPPORTED');
       }
 
       // Block if compression didn't actually reduce file size
@@ -689,7 +765,9 @@ const App = () => {
     } catch (error) {
       if (cancelRequestedRef.current) return;
       console.error('Compression error:', error);
-      Alert.alert('Error', `Compression failed: ${error}`);
+      // Re-throw so the caller can apply the encoder-floor fallback.
+      // The caller alerts if there is no fallback to apply.
+      throw error;
     }
   };
 
@@ -1419,7 +1497,7 @@ const App = () => {
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={styles.modalTitle}>Submit to Small File TV</Text>
               <Text style={styles.modalDescription}>
-                Submitting {selectedForSubmit.length} video{selectedForSubmit.length > 1 ? 's' : ''} for review at smallfile.ca/tv,
+                Submitting {selectedForSubmit.length} video{selectedForSubmit.length > 1 ? 's' : ''} for review at smallfile.tv,
                 a showcase for creative, low bitrate content proving you don't need big files to tell great stories.
               </Text>
               <TextInput
@@ -1463,7 +1541,7 @@ const App = () => {
                   {agreedToTerms && <Text style={styles.consentCheck}>✓</Text>}
                 </View>
                 <Text style={styles.consentText}>
-                  I agree that my video may be shown on smallfile.ca/tv and understand that 
+                  I agree that my video may be shown on smallfile.tv and understand that 
                   Small File Media Society does not profit from submissions.
                 </Text>
               </TouchableOpacity>
@@ -2064,7 +2142,11 @@ const styles = StyleSheet.create({
 
   // ── Modals ──
   modalOverlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.95)',
     justifyContent: 'center',
     padding: 24,
