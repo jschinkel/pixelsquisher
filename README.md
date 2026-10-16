@@ -15,7 +15,7 @@ Online video is responsible for a large and growing share of global carbon emiss
 - **Preset modes.** From Standard (480p with sound) down to Pixel Soup (240p, silent, maximum crush).
 - **Custom mode.** Dial in your own resolution, bitrate, and audio, with a name generated for every combination.
 - **Submit to Small File TV.** Send clips straight to the showcase at [smallfile.tv](https://smallfile.tv).
-- **Save and share.** Export to your gallery or share to any app.
+- **Save and share.** Export to a dedicated Pixel Squisher album in your gallery, or share to any app.
 
 ## Compression modes
 

@@ -145,7 +145,7 @@ const COMPRESSION_MODES: CompressionMode[] = [
   { name: 'Tiny', description: '~1.0 MB/min · 360p with sound', bitrate: 80000, maxSize: 360 },
   { name: 'Micro', description: '~0.5 MB/min · 360p, silent', bitrate: 64000, maxSize: 360, disableAudio: true },
   { name: 'Blocky', description: '~0.4 MB/min · 360p, silent, pixelated', bitrate: 48000, maxSize: 360, disableAudio: true },
-  { name: 'Pixel Soup', description: '~0.3 MB/min · 320p, silent, max crush', bitrate: 40000, maxSize: 320, disableAudio: true },
+  { name: 'Pixel Soup', description: '~0.3 MB/min · 240p, silent, max crush', bitrate: 40000, maxSize: 240, disableAudio: true },
 ];
 
 const AUTO_DELETE_AFTER = 7 * 24 * 60 * 60 * 1000;
@@ -155,32 +155,18 @@ const APP_SIZE_MB = 0;
 
 
 
-const S_W = Dimensions.get('window').width;
-const S_H = Dimensions.get('window').height;
-const COLS = 6;
-const PIXEL_SIZE = Math.ceil(S_W / COLS) + 1;
-const ROWS = Math.ceil(S_H / PIXEL_SIZE) + 1;
-const TOTAL = COLS * ROWS;
-const PIXEL_COLORS = [
-  '#0ad86d', '#0ad86d', '#0ad86d', '#0ad86d',
-  '#0ad86d', '#08c060', '#09d068', '#0ad86d',
-  '#07b055', '#0ad86d', '#0ad86d', '#06a050',
-];
-// Intro pixel: holds ~300ms, then dissolves on the UI thread. Self-contained.
-const DissolvePixel = ({ color }: { color: string }) => {
+// Intro: a single solid green screen that holds briefly, then dissolves on the
+// UI thread. One colour, one fade, no varying blocks.
+const IntroDissolve = () => {
   const op = useSharedValue(1);
   React.useEffect(() => {
     op.value = withDelay(
-      380 + Math.random() * 400,
-      withTiming(0, { duration: 80 + Math.random() * 180, easing: REasing.out(REasing.ease) })
+      380,
+      withTiming(0, { duration: 520, easing: REasing.out(REasing.ease) })
     );
   }, []);
   const st = useAnimatedStyle(() => ({ opacity: op.value }));
-  return (
-    <Animated_R.View
-      style={[{ width: PIXEL_SIZE, height: PIXEL_SIZE, backgroundColor: color }, st]}
-    />
-  );
+  return <Animated_R.View style={[styles.introDissolve, st]} pointerEvents="none" />;
 };
 
 // Gentle opacity pulse for the compressing skeleton entry
@@ -221,6 +207,7 @@ const App = () => {
   const [videos, setVideos] = useState<CompressedVideo[]>([]);
   const [compressing, setCompressing] = useState(false);
   const [selecting, setSelecting] = useState(false);
+  const [savingToGallery, setSavingToGallery] = useState(false);
   const [totalSaved, setTotalSaved] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -886,9 +873,15 @@ const App = () => {
     if (!video) return;
 
     try {
-      await CameraRoll.saveAsset(`file://${video.compressedPath}`, { type: 'video' });
-      Alert.alert('Saved', 'Video saved to your gallery');
+      setSavingToGallery(true);
+      await CameraRoll.saveAsset(`file://${video.compressedPath}`, {
+        type: 'video',
+        album: 'Pixel Squisher',
+      });
+      setSavingToGallery(false);
+      Alert.alert('Saved', 'Video saved to the Pixel Squisher album in your gallery.');
     } catch (error) {
+      setSavingToGallery(false);
       Alert.alert('Error', 'Failed to save video to gallery');
     }
   };
@@ -904,6 +897,24 @@ const App = () => {
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  // Lightweight connectivity check. Any HTTP response means we reached the
+  // network; a thrown error or timeout means we're offline. Dependency-free
+  // so we don't pull in NetInfo just for this.
+  const hasNetwork = async (): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      await fetch('https://firebasestorage.googleapis.com/', {
+        method: 'HEAD',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return true;
+    } catch (e) {
+      return false;
+    }
   };
 
   const submitVideos = async () => {
@@ -926,6 +937,15 @@ const App = () => {
 
     const videosToSubmit = videos.filter(v => selectedForSubmit.includes(v.id));
     if (videosToSubmit.length === 0) return;
+
+    const online = await hasNetwork();
+    if (!online) {
+      Alert.alert(
+        'No Connection',
+        'You need an internet connection to submit to Small File TV. Reconnect and try again.'
+      );
+      return;
+    }
 
     try {
       setUploading(true);
@@ -1327,6 +1347,7 @@ const App = () => {
         visible={showContextMenu}
         animationType="fade"
         transparent={true}
+        statusBarTranslucent={true}
         onRequestClose={closeContextMenu}
       >
         <TouchableOpacity
@@ -1358,6 +1379,7 @@ const App = () => {
         visible={showModeSelector}
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         onRequestClose={() => setShowModeSelector(false)}
       >
         <View style={styles.modalOverlay}>
@@ -1401,6 +1423,7 @@ const App = () => {
         visible={showCustomPanel}
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         onRequestClose={() => setShowCustomPanel(false)}
       >
         <View style={styles.modalOverlay}>
@@ -1490,6 +1513,7 @@ const App = () => {
         visible={showSubmitModal}
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         onRequestClose={() => !uploading && setShowSubmitModal(false)}
       >
         <View style={styles.modalOverlay}>
@@ -1600,7 +1624,7 @@ const App = () => {
         <ScrollView style={styles.aboutScroll} showsVerticalScrollIndicator={false}>
           <Text style={styles.aboutSection}>PIXEL SQUISHER</Text>
           <Text style={styles.aboutText}>
-            {'Version 1.0.0\nA Small File Media Society project\n\nPixel Squisher is a free alternative to typical compression apps, built to help anyone quickly compress video to or below the Small File standard (1.44 MB/min), entirely on-device. No data centers, no edge servers, no internet required. Compress locally and submit your favourite clips directly to Small File TV.'
+            {'Version 1.0.1\nA Small File Media Society project\n\nPixel Squisher is a free alternative to typical compression apps, built to help anyone quickly compress video to or below the Small File standard (1.44 MB/min), entirely on-device. No data centers, no edge servers, no internet required. Compress locally and submit your favourite clips directly to Small File TV.'
               + (APP_SIZE_MB > 0 ? `\n\nThe entire app is under ${APP_SIZE_MB} MB. Smaller than ten seconds of 4K video.` : '')
               + (totalSaved > 0 ? `\n\nYour squishes have saved ${formatSize(totalSaved)} of data so far.` : '')}
           </Text>
@@ -1646,12 +1670,16 @@ const App = () => {
         </View>
       </Animated.View>
 
-      {/* ── PIXEL DISSOLVE OVERLAY ── */}
-      {!pixelsDone && (
-        <View style={styles.pixelGrid} pointerEvents="none">
-          {Array.from({ length: TOTAL }, (_, i) => (
-            <DissolvePixel key={i} color={PIXEL_COLORS[i % PIXEL_COLORS.length]} />
-          ))}
+      {/* ── INTRO DISSOLVE OVERLAY ── */}
+      {!pixelsDone && <IntroDissolve />}
+
+      {/* ── PREPARING / SAVING OVERLAY ── */}
+      {(selecting || savingToGallery) && (
+        <View style={styles.statusOverlay}>
+          <ActivityIndicator color="#0ad86d" size="large" />
+          <Text style={styles.statusOverlayText}>
+            {savingToGallery ? 'Saving to Photos...' : 'Preparing video...'}
+          </Text>
         </View>
       )}
     </View>
@@ -1660,16 +1688,32 @@ const App = () => {
 
 const styles = StyleSheet.create({
   // ── Shared ──
-  pixelGrid: {
+  introDissolve: {
     position: 'absolute',
     top: 0,
     left: 0,
-    width: S_W + PIXEL_SIZE,
-    height: S_H + PIXEL_SIZE,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0ad86d',
     zIndex: 999,
-    overflow: 'hidden',
+  },
+  statusOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 998,
+  },
+  statusOverlayText: {
+    color: '#0ad86d',
+    fontSize: 15,
+    marginTop: 16,
+    letterSpacing: 1,
+    fontFamily: 'Redaction50-Regular',
   },
   container: {
     flex: 1,
@@ -1854,6 +1898,9 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
     fontWeight: '400',
+    lineHeight: 18,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   cancelCompressionButton: {
     backgroundColor: '#c0392b',
